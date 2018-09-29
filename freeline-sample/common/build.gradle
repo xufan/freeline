@@ -19,7 +19,8 @@ android {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
-    api deps.appcompatV7
-    api project(":freeline-sample:resources")
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+    compile deps.appcompatV7
+    compile project(":freeline-sample:resources")
 }

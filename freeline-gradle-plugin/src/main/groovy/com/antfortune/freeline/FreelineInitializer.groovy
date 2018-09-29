@@ -3,11 +3,11 @@ package com.antfortune.freeline
 import com.android.build.gradle.AppExtension
 import com.antfortune.freeline.versions.StaticVersionComparator
 import com.antfortune.freeline.versions.VersionParser
+import com.android.builder.model.ProductFlavor
 import groovy.json.JsonBuilder
 import org.gradle.api.Project
 
 import java.security.InvalidParameterException
-
 /**
  * Created by huangyong on 16/7/19.
  */
@@ -70,7 +70,7 @@ class FreelineInitializer {
         projectDescription.use_system_gradle = useSystemGradle
 
         def useMd5PathArray = [];
-        for (String path : checkSourcesMd5) {
+        for(String path : checkSourcesMd5){
             useMd5PathArray.add(FreelineUtils.joinPath(project.rootDir.absolutePath, path))
         }
         projectDescription.check_sources_md5 = useMd5PathArray
@@ -98,10 +98,21 @@ class FreelineInitializer {
                     invalidFlavor = false;
                 }
             }
+            def flavorApplicationIdSuffix = ""
+            for (ProductFlavor flavor : baseVariant.productFlavors) {
+                if (baseVariant.flavorName.equals(flavor.getName())) {
+                    flavorApplicationIdSuffix = flavor.applicationIdSuffix
+                    break
+                }
+            }
+            if (flavorApplicationIdSuffix == null || flavorApplicationIdSuffix == "") {
+                flavorApplicationIdSuffix = baseVariant.buildType.applicationIdSuffix
+            }
+
             def buildType = baseVariant.buildType;
             if (!applicationSuffixAdded && "debug".equalsIgnoreCase(buildType.name as String)) {
-                if (buildType.applicationIdSuffix) {
-                    projectDescription.debug_package = projectDescription.debug_package + buildType.applicationIdSuffix
+                if (flavorApplicationIdSuffix) {
+                    projectDescription.debug_package = projectDescription.debug_package + flavorApplicationIdSuffix
                     applicationSuffixAdded = true
                 }
             }
@@ -157,7 +168,7 @@ class FreelineInitializer {
             def pro = allProjectMap.get(product.name)
             def sourceSets = createSourceSets(pro, product.flavor, product.buildType)
             project_source_sets[pro.name] = sourceSets
-            modules.add(['name': pro.name, 'path': pro.projectDir.absolutePath])
+            modules.add(['name': pro.name, 'path': pro.projectDir.absolutePath, 'flavor':product.flavor, 'buildType': product.buildType])
         }
 
         def mainAppSourceSets = project_source_sets[project.name];
@@ -304,17 +315,6 @@ class FreelineInitializer {
         if (compile) {
             collectLocalDependency(allProjectMap, compile, moduleDependencies, deps)
         }
-
-        def implementation = project.configurations.findByName("implementation")
-        if (implementation) {
-            collectLocalDependency(allProjectMap, implementation, moduleDependencies, deps)
-        }
-
-        def api = project.configurations.findByName("api")
-        if (api) {
-            collectLocalDependency(allProjectMap, api, moduleDependencies, deps)
-        }
-
         if (productFlavor) {
             def productFlavorCompile = project.configurations.findByName(productFlavor + "Compile");
             if (productFlavorCompile) {
@@ -388,7 +388,7 @@ class FreelineInitializer {
         if (android != null && android.hasProperty("libraryVariants")) {
             android.libraryVariants.each { bv ->
                 if (bv.getName().equalsIgnoreCase(favorBuildType)) {
-                    deps.add(new ProjectProductInfo("android", dependencyProject.name, bv.flavorName, bv.buildType.name))
+                    deps.add(new ProjectProductInfo("android", dependencyProject.name, bv.flavorName , bv.buildType.name))
                     handleAndroidProject(dependencyProject, allProjectMap, bv.flavorName as String, bv.buildType.name as String, moduleDependencies);
                     return;
                 }

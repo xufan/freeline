@@ -1,10 +1,9 @@
 package com.antfortune.freeline
 
-import com.android.build.gradle.AppExtension
-import com.android.utils.FileUtils
 import groovy.io.FileType
 import groovy.json.JsonBuilder
 import groovy.xml.XmlUtil
+import org.apache.commons.io.FileUtils
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -16,33 +15,44 @@ import org.gradle.util.VersionNumber
  * Created by yeqi on 16/5/3.
  */
 class FreelinePlugin implements Plugin<Project> {
-    private Project project
-    private AppExtension androidExt
-    private FreelineExtension freelineExt
+
+    String freelineVersion = "0.9.1"
 
     @Override
     void apply(Project project) {
-        // check
-        if (!project.plugins.hasPlugin("com.android.application")) {
-            throw new RuntimeException("Freeline plugin can only be applied for android application module.")
+        def des = FreelineUtils.readProjectDescription(project.rootProject)
+        if(des!=null){
+            project.rootProject.extensions["projectDescription"] = des
         }
-        this.project = project
-        this.androidExt = project.extensions.getByName("android") as AppExtension
-        this.freelineExt = project.extensions.create("freeline", FreelineExtension, project)
+        project.extensions.create("freeline", FreelineExtension, project)
 
-        project.rootProject.task("initFreeline").doLast {
+        if (FreelineUtils.getProperty(project, "disableAutoDependency")) {
+            println "freeline auto-dependency disabled"
+        } else {
+            println "freeline auto add runtime dependencies: ${freelineVersion}"
+            project.dependencies {
+                debugCompile "com.antfortune.freeline:runtime:${freelineVersion}"
+                releaseCompile "com.antfortune.freeline:runtime-no-op:${freelineVersion}"
+                testCompile "com.antfortune.freeline:runtime-no-op:${freelineVersion}"
+            }
+        }
+
+        project.rootProject.task("initFreeline") << {
             FreelineInitializer.initFreeline(project)
         }
 
-        project.rootProject.task("checkBeforeCleanBuild").doLast {
+        project.rootProject.task("checkBeforeCleanBuild") << {
             FreelineInitializer.generateProjectDescription(project)
         }
 
         project.afterEvaluate {
-            autoDependency()
+            // check
+            if (!project.plugins.hasPlugin("com.android.application")) {
+                throw new RuntimeException("Freeline plugin can only be applied for android application module.")
+            }
 
-            androidExt.applicationVariants.each { variant ->
-                def extension = freelineExt
+            project.android.applicationVariants.each { variant ->
+                def extension = project.extensions.findByName("freeline") as FreelineExtension
                 def productFlavor = extension.productFlavor
                 def apkPath = extension.apkPath
                 def excludeHackClasses = extension.excludeHackClasses
@@ -52,11 +62,6 @@ class FreelinePlugin implements Plugin<Project> {
                 def retrolambdaEnabled = extension.retrolambdaEnabled
                 def forceVersionName = extension.forceVersionName
                 def freelineBuild = FreelineUtils.getProperty(project, "freelineBuild")
-
-                // check match freeline condition
-                if (!freelineBuild) {
-                    return
-                }
 
                 //早点判断Android Studio的plugin版本
                 def isLowerVersion = false
@@ -77,6 +82,7 @@ class FreelinePlugin implements Plugin<Project> {
                     isLowerVersion = true
                 }
 
+
                 if (!"debug".equalsIgnoreCase(variant.buildType.name as String)) {
                     println "variant ${variant.name} is not debug, skip hack process."
                     return
@@ -86,6 +92,10 @@ class FreelinePlugin implements Plugin<Project> {
                 }
 
                 println "find variant ${variant.name} start hack process..."
+
+                if (!freelineBuild) {
+                    return
+                }
 
                 if (forceVersionName) {
                     variant.mergedFlavor.versionName = "FREELINE"
@@ -146,17 +156,22 @@ class FreelinePlugin implements Plugin<Project> {
                     variant.outputs.each { output ->
                         output.processManifest.outputs.upToDateWhen { false }
                         output.processManifest.doLast {
-                            File manifestFile
-                            if (isStudioCanaryVersion) {
-                                manifestFile = new File("$manifestOutputDirectory/AndroidManifest.xml")
-                            } else {
-                                manifestFile = output.processManifest.manifestOutputFile
+                            if(isStudioCanaryVersion){
+//                            修改了Manifest的获取方式 之前api已被取消 不过根据Manifest的位置相对固定就这样子去访问了
+                                def path = "$manifestOutputDirectory/AndroidManifest.xml"
+                                def manifestFile = new File(path)
+                                if (manifestFile.exists()) {
+                                    println "find manifest file path: ${manifestFile.absolutePath}"
+                                    replaceApplication(manifestFile.absolutePath as String)
+                                }
+                            }else {
+                                def manifestOutFile = output.processManifest.manifestOutputFile
+                                if (manifestOutFile.exists()) {
+                                    println "find manifest file path: ${manifestOutFile.absolutePath}"
+                                    replaceApplication(manifestOutFile.absolutePath as String)
+                                }
                             }
 
-                            if (manifestFile != null && manifestFile.exists()) {
-                                println "find manifest file path: ${manifestFile.absolutePath}"
-                                replaceApplication(manifestFile.absolutePath as String)
-                            }
                         }
                     }
                 }
@@ -267,10 +282,10 @@ class FreelinePlugin implements Plugin<Project> {
                 def multiDexListTask
 
                 boolean multiDexEnabled
-                if (isStudioCanaryVersion) {
+                if (isStudioCanaryVersion){
 //                因为gradle plugin最新版的variantData命名和之前相比不同
                     multiDexEnabled = variant.variantData.variantConfiguration.isMultiDexEnabled()
-                } else {
+                }else {
                     multiDexEnabled = variant.apkVariantData.variantConfiguration.isMultiDexEnabled()
                 }
 
@@ -324,8 +339,7 @@ class FreelinePlugin implements Plugin<Project> {
 
                         preDexTask.inputs.files.files.each { f ->
                             if (f.path.endsWith(".jar")) {
-                                // 屏蔽注入，减少Windows IO操作
-                                //FreelineInjector.inject(excludeHackClasses, f as File, modules.values())
+                                FreelineInjector.inject(excludeHackClasses, f as File, modules.values())
                                 jarDependencies.add(f.path)
                             }
                         }
@@ -346,17 +360,15 @@ class FreelinePlugin implements Plugin<Project> {
                     classesProcessTask.inputs.files.files.each { f ->
                         if (f.isDirectory()) {
                             f.eachFileRecurse(FileType.FILES) { file ->
-                                // 屏蔽注入，减少Windows IO操作
-                                //backUpClass(backupMap, file as File, backUpDirPath as String, modules.values())
-                                //FreelineInjector.inject(excludeHackClasses, file as File, modules.values())
+                                backUpClass(backupMap, file as File, backUpDirPath as String, modules.values())
+                                FreelineInjector.inject(excludeHackClasses, file as File, modules.values())
                                 if (file.path.endsWith(".jar")) {
                                     jarDependencies.add(file.path)
                                 }
                             }
                         } else {
-                            // 屏蔽注入，减少Windows IO操作
-                            //backUpClass(backupMap, f as File, backUpDirPath as String, modules.values())
-                            //FreelineInjector.inject(excludeHackClasses, f as File, modules.values())
+                            backUpClass(backupMap, f as File, backUpDirPath as String, modules.values())
+                            FreelineInjector.inject(excludeHackClasses, f as File, modules.values())
                             if (f.path.endsWith(".jar")) {
                                 jarDependencies.add(f.path)
                             }
@@ -403,26 +415,10 @@ class FreelinePlugin implements Plugin<Project> {
                         FreelineUtils.addNewAttribute(project, 'retrolambda', projectRetrolambdaConfig)
                         FreelineUtils.addNewAttribute(project, 'databinding_compiler_jar', databindingCompilerJarPath)
                         FreelineUtils.addNewAttribute(project, 'apt_libraries', aptLibraries)
-                        // 屏蔽注入，减少Windows IO操作
-                        //rollBackClasses(backupMap)
+                        rollBackClasses(backupMap)
                     }
                 }
             }
-        }
-    }
-
-    private void autoDependency() {
-        if (freelineExt.autoDependency) {
-            // the same as plugin version
-            String freelineVersion = FreelineUtils.getFreelineGradlePluginVersion(project)
-            println "freeline auto add runtime dependencies: ${freelineVersion}"
-            project.dependencies {
-                debugImplementation "com.antfortune.freeline:runtime:${freelineVersion}"
-                releaseImplementation "com.antfortune.freeline:runtime-no-op:${freelineVersion}"
-                testImplementation "com.antfortune.freeline:runtime-no-op:${freelineVersion}"
-            }
-        } else {
-            println "freeline auto-dependency disabled"
         }
     }
 
@@ -496,12 +492,20 @@ class FreelinePlugin implements Plugin<Project> {
                             "${p.name}${File.separator}build${File.separator}intermediates${File.separator}bundles${File.separator}"
                     ]
                     if (type == "resources") {
-                        p.android.sourceSets.main.res.srcDirs.asList().collect(mapper.path) {
+                        if(project.rootProject.hasProperty("projectDescription")){
+                            project.rootProject.projectDescription["project_source_sets"][p.name]["main_res_directory"].asList().collect(mapper.path){it}
+                        }else{
+                           p.android.sourceSets.main.res.srcDirs.asList().collect(mapper.path) {
                             it.absolutePath
+                           }
                         }
                     } else if (type == "assets") {
-                        p.android.sourceSets.main.assets.srcDirs.asList().collect(mapper.path) {
-                            it.absolutePath
+                        if(project.rootProject.hasProperty("projectDescription")){
+                            project.rootProject.projectDescription["project_source_sets"][p.name]["main_assets_directory"].asList().collect(mapper.path){it}
+                        }else{
+                            p.android.sourceSets.main.assets.srcDirs.asList().collect(mapper.path) {
+                                it.absolutePath
+                            }
                         }
                     }
                     mappers.add(mapper)
@@ -704,7 +708,7 @@ class FreelinePlugin implements Plugin<Project> {
                 }
             }
         }
-        if (shouldDealWithResolveProblem) {
+        if (shouldDealWithResolveProblem){
             project.configurations.each {
                 config -> config.setCanBeResolved(true)
             }

@@ -1,30 +1,30 @@
 package com.antfortune.freeline.idea.actions;
 
-import com.android.tools.idea.gradle.dsl.model.GradleBuildModel;
-import com.android.tools.idea.gradle.dsl.model.dependencies.ArtifactDependencyModel;
+import com.android.tools.idea.gradle.dsl.api.GradleBuildModel;
+import com.android.tools.idea.gradle.dsl.api.dependencies.ArtifactDependencyModel;
 import com.antfortune.freeline.idea.icons.PluginIcons;
+import com.antfortune.freeline.idea.models.ArtifactDependencyModelWrapper;
+import com.antfortune.freeline.idea.models.GetServerCallback;
+import com.antfortune.freeline.idea.models.GradleDependencyEntity;
+import com.antfortune.freeline.idea.utils.*;
+import com.antfortune.freeline.idea.views.CheckUpdateDialog;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId;
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListenerAdapter;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.antfortune.freeline.idea.models.ArtifactDependencyModelWrapper;
-import com.antfortune.freeline.idea.models.GradleDependencyEntity;
-import com.antfortune.freeline.idea.models.GetServerCallback;
-import com.antfortune.freeline.idea.models.GradleSyncHandler;
 import org.jetbrains.annotations.NotNull;
-import com.antfortune.freeline.idea.utils.*;
-import com.antfortune.freeline.idea.views.CheckUpdateDialog;
 
-import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Created by pengwei on 16/9/11.

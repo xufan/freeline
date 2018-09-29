@@ -1,11 +1,16 @@
 package com.antfortune.freeline.idea.utils;
 
-import com.antfortune.freeline.idea.actions.UpdateAction;
-
-import com.android.tools.idea.gradle.dsl.model.GradleBuildModel;
-import com.android.tools.idea.gradle.dsl.model.dependencies.ArtifactDependencyModel;
-import com.android.tools.idea.gradle.dsl.model.dependencies.ArtifactDependencySpec;
+import com.android.tools.idea.gradle.dsl.api.GradleBuildModel;
+import com.android.tools.idea.gradle.dsl.api.dependencies.ArtifactDependencyModel;
+import com.android.tools.idea.gradle.dsl.api.dependencies.ArtifactDependencySpec;
 import com.android.tools.idea.gradle.parser.GradleBuildFile;
+import com.antfortune.freeline.idea.actions.UpdateAction;
+import com.antfortune.freeline.idea.icons.PluginIcons;
+import com.antfortune.freeline.idea.models.ArtifactDependencyModelWrapper;
+import com.antfortune.freeline.idea.models.Constant;
+import com.antfortune.freeline.idea.models.FreelineStatus;
+import com.antfortune.freeline.idea.models.GetServerCallback;
+import com.antfortune.freeline.idea.models.GradleDependencyEntity;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.process.OSProcessHandler;
@@ -30,20 +35,23 @@ import com.intellij.openapi.wm.ToolWindowAnchor;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.ui.content.impl.ContentImpl;
-import com.antfortune.freeline.idea.icons.PluginIcons;
-import com.antfortune.freeline.idea.models.*;
+
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile;
 
-import java.util.*;
-
-import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.swing.AbstractAction;
+import javax.swing.JLabel;
+import javax.swing.SwingConstants;
 
 /**
  * Freeline Utility
@@ -306,7 +314,7 @@ public class FreelineUtil {
                                     for (ArtifactDependencyModel model1 : artifactDependencyModels) {
                                         ArtifactDependencyModelWrapper wrapper = new ArtifactDependencyModelWrapper(model1);
                                         if (wrapper.group().equals(Constant.ANDROID_GRADLE_TOOL_GROUP_NAME)) {
-                                            ArtifactDependencySpec spec = new ArtifactDependencySpec(dependencyEntity.getArtifactId(),
+                                            ArtifactDependencySpec spec = ArtifactDependencySpec.create(dependencyEntity.getArtifactId(),
                                                     dependencyEntity.getGroupId(), dependencyEntity.getNewestReleaseVersion());
                                             model.buildscript().dependencies().addArtifact("classpath", spec);
                                             model.applyChanges();

@@ -18,12 +18,13 @@ class FreelineDownloader {
     private static final String PARAM_CDN_URL = "freelineCdnUrl"
     private static final String PARAM_LOCAL = "freelineLocal"
 
-    private static final String GITHUB_API = "https://api.github.com/repos/alibaba/freeline/releases/latest"
+    private static final String GITHUB_API = "https://api.github.com/repos/xufan/freeline/releases/latest"
     private static final String FREELINE_API = "https://www.freelinebuild.com/api/versions/latest"
     private static final String CDN_URL = "http://static.freelinebuild.com/freeline"
 
     public static void execute(Project project) {
-        def mirror = project.hasProperty(PARAM_MIRROR)
+//        def mirror = project.hasProperty(PARAM_MIRROR)
+        def mirror = false
         String freelineVersion = FreelineUtils.getProperty(project, PARAM_VERSION)
         String cdnUrl = FreelineUtils.getProperty(project, PARAM_CDN_URL)
         String localPath = FreelineUtils.getProperty(project, PARAM_LOCAL)
@@ -38,17 +39,17 @@ class FreelineDownloader {
         }
 
         if (FreelineUtils.isEmpty(targetUrl)) {
-            if (freelineVersion) {
-                println "[NOTE] Download freeline dependency for specific version ${freelineVersion}..."
-                targetUrl = getDownloadUrl(cdnUrl, freelineVersion, true)
-            } else {
+//            if (freelineVersion) {
+//                println "[NOTE] Download freeline dependency for specific version ${freelineVersion}..."
+//                targetUrl = getDownloadUrl(cdnUrl, freelineVersion, true)
+//            } else {
                 targetUrl = fetchData(project, cdnUrl, mirror)
                 if (FreelineUtils.isEmpty(targetUrl)) {
                     throw new GradleException("Download Error: failed to get download url from: \n" +
                             "    1. ${FREELINE_API}\n" +
                             "    2. ${GITHUB_API}\n")
                 }
-            }
+//            }
         }
 
         def ant = new AntBuilder()
@@ -128,14 +129,14 @@ class FreelineDownloader {
     }
 
     private static String fetchData(Project project, String cdnUrl, boolean mirror) {
-        def json = fetchDataFromAPI(project)
-        if (json != null) {
-            String version = json.freelineVersion.version
-            checkVersion(project, version)
-            return getDownloadUrl(mirror, cdnUrl, version, json.freelineVersion.download_url as String)
-        }
+//        def json = fetchDataFromAPI(project)
+//        if (json != null) {
+//            String version = json.freelineVersion.version
+//            checkVersion(project, version)
+//            return getDownloadUrl(mirror, cdnUrl, version, json.freelineVersion.download_url as String)
+//        }
 
-        json = fetchDataFromGithub(project)
+        def json = fetchDataFromGithub(project)
         if (json != null) {
             String version = json.name
             checkVersion(project, version)
